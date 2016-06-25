@@ -1,7 +1,7 @@
 """
 Predict community membership by presence or absence of a feature.
 
-Use a given feature matrix as well as the latent factors.
+Use a given feature matrix as well as the average of features of neighbors.
 """
 
 import numpy as np
@@ -22,70 +22,46 @@ adj = sys.argv[1]
 
 BASE = ''
 
-# feature matrix
-DATA_FILE        = {'ego0':BASE+'data/0_hometown.features',
-                    'ego3059':BASE+'data/3059_hometown.features',
-                    'full9core-protection':BASE+'data/allwave1_H1CO3-dense-9core.csv',
-                    'full9core-risky':BASE+'data/allwave1_H1CO3-dense-9core_flip.csv'}
-# social network adjacency matrix
-ADJ_FILE         = {'ego0':BASE+'data/0.adj',
-                    'ego3059':BASE+'data/3059.adj',
-                    'full9core-protection':BASE+'data/allwave1_H1CO3-dense-9core_adjmat.csc.npz',
-                    'full9core-risky':BASE+'data/allwave1_H1CO3-dense-9core_adjmat.csc.npz'}
+# feature matrix with neighbor averages
+N_FILE           = {'ego0':BASE+'data/0_hometown_NF.pck',
+                    'full9core-protection':BASE+'data/allwave1_H1CO3-dense-9core_NF.pck',
+                    'full9core-risky':BASE+'data/allwave1_H1CO3-dense-9core_NF.pck'}
 # data set partitions (training, validation, test)
 PCK_FILE         = {'ego0':BASE+'data/0_partitions.pck',
                     'ego3059':BASE+'data/3059_partitions.pck',
                     'full9core-protection':BASE+'data/allwave1_H1CO3-dense-9core_partitions.pck',
                     'full9core-risky':BASE+'data/allwave1_H1CO3-dense-9core_flip_partitions.pck'}
-# latent factors
-PCK_LFM_FILE     = {'ego0':BASE+'results/ego0/0_latent_factors.pck',
-                    'ego3059':BASE+'results/ego3059/3059_latent_factors.pck',
-                    'full9core-protection':BASE+'results/full9core-protection/allwave1_H1CO3-dense-9core_latent_factors.pck',
-                    'full9core-risky':BASE+'results/full9core-risky/allwave1_H1CO3-dense-9core_latent_factors.pck'}
 # learned coefficients
-PCK_THETA_FILE   = {'ego0':BASE+'results/ego0/0_hometown_lfm_theta.pck',
-                    'ego3059':BASE+'results/ego3059/3059_hometown_lfm_theta.pck',
-                    'full9core-protection':BASE+'results/full9core-protection/allwave1_H1CO3-dense-9core_lfm_theta.pck',
-                    'full9core-risky':BASE+'results/full9core-risky/allwave1_H1CO3-dense-9core_lfm_theta.pck'}
+PCK_THETA_FILE   = {'ego0':BASE+'results/ego0/0_hometown_neighbor_theta.pck',
+                    'ego3059':BASE+'results/ego3059/3059_hometown_neighbor_theta.pck',
+                    'full9core-protection':BASE+'results/full9core-protection/allwave1_H1CO3-dense-9core_neighbor_theta.pck',
+                    'full9core-risky':BASE+'results/full9core-risky/allwave1_H1CO3-dense-9core_neighbor_theta.pck'}
 # output
-OUT_FILE         = {'ego0':base+'results/ego0/0_hometown_lfm.out',
-                    'ego3059':base+'results/ego3059/3059_hometown_lfm.out',
-                    'full9core-protection':base+'results/full9core-protection/allwave1_H1CO3-dense-9core_lfm.out',
-                    'full9core-risky':base+'results/full9core-risky/allwave1_H1CO3-dense-9core_lfm.out'}
+OUT_FILE         = {'ego0':base+'results/ego0/0_hometown_neighbor.out',
+                    'ego3059':base+'results/ego3059/3059_hometown_neighbor.out',
+                    'full9core-protection':base+'results/full9core-protection/allwave1_H1CO3-dense-9core_neighbor.out',
+                    'full9core-risky':base+'results/full9core-risky/allwave1_H1CO3-dense-9core_neighbor.out'}
 # figures
-FIG_FILE         = {'ego0':base+'results/ego0/0_hometown_lfm',
-                    'ego3059':base+'results/ego3059/3059_hometown_lfm',
-                    'full9core-protection':base+'results/full9core-protection/allwave1_H1CO3-dense-9core_lfm',
-                    'full9core-risky':base+'results/full9core-risky/allwave1_H1CO3-dense-9core_lfm'}
+FIG_FILE         = {'ego0':base+'results/ego0/0_hometown_neighbor',
+                    'ego3059':base+'results/ego3059/3059_hometown_neighbor',
+                    'full9core-protection':base+'results/full9core-protection/allwave1_H1CO3-dense-9core_neighbor'}
+                    'full9core-risky':base+'results/full9core-risky/allwave1_H1CO3-dense-9core_neighbor'}
 
 print '\n\nloading and preparing data...'
 print '=================================================='
 
-# load feature matrix
-if adj[:3] == 'ego':
-    F = np.genfromtxt(DATA_FILE[adj] , delimiter=',', comments='#')
-    n = F.shape[0]
-    f = F.shape[1]
-    F = [np.insert(row,0,1.0) for row in F]
-    F = np.reshape(F, (n, f+1))
-
-else:
-    df = pd.read_csv(DATA_FILE[adj])
-    _examples = df['AID']
-    examples = _examples.values
-    df.drop('AID', axis=1, inplace=True)
-    F = df.values
-
-n = F.shape[0]
-f = F.shape[1]
+# load averages of neighbor features
+nf_pck = open(N_FILE[adj], 'rb')
+X = pickle.load(nf_pck)
+nf_pck.close()
 
 
-############################################################
-###      Network-Enhanced Community Detection -- LFM     ###
-############################################################
+###################################################################################
+###      Network-Enhanced Community Detection -- Average of neighbor values     ###
+###################################################################################
 
 out = open(OUT_FILE[adj], 'w')
-out.write('Network enhanced community detection with LFM')
+out.write('Network enhanced community detection with average of neighbor values')
 out.write('\n==================================================')
 out.write('\n==================================================')
 out.write('\n\nData matrix: '+str(n)+' x '+str(f))
@@ -117,17 +93,6 @@ I = np.nonzero(y)
 zI = np.where(y==0)
 
 out.write('\nnumber of positive examples:'+str(numpos))
-
-# get latent factor matrices 
-lfm_f = open(PCK_LFM_FILE[adj], 'rb')
-U = pickle.load(lfm_f)
-V = pickle.load(lfm_f)
-beta = pickle.load(lfm_f)
-alpha = pickle.load(lfm_f)
-lfm_f.close()
-
-# add latent factors 
-X = np.concatenate((U, V, F), axis=1)
 
 # build sets
 X_train = np.take(X, [I[0][x] for x in pos_train], axis=0)
